@@ -1,0 +1,213 @@
+﻿@page "/todoapp";
+@using System.Text.Json;
+@using System.Net.Http.Json
+@using System.Text
+@rendermode InteractiveServer
+@inject IJSRuntime JsRuntime;
+@inject NavigationManager NavigationManager
+
+
+
+<h3>TodoApp</h3>
+
+ 
+ <div style="margin:1rem">
+    <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#exampleModal">Add new Note</button>
+    <button @onclick="DeleteAllNotes" class="btn btn-danger">Delete All</button>
+</div>
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+
+    <div class="container text-center">
+        <div class="row">
+
+            @foreach (var note in notes)
+    {
+           @* <div class="col"> *@
+                <div class="card" style="width: 18rem; margin:1rem">
+                    <div class="card-body">
+                        <h5 class="card-title">Card title</h5>
+                        <h6 class="card-subtitle mb-2 text-body-secondary">Card subtitle</h6>
+                        <p class="card-text">@note.Description</p>
+                        <button class="btn btn-danger" @onclick="()=>deleteNote(note.Id)">Delete</button>
+                        <button class="btn btn-success" @onclick="() => NavigateToUpdatePage(note.Id)">View</button>
+
+                    </div>
+                </div>
+            @* </div> *@
+
+          
+    }
+        </div>
+    </div>
+
+
+    @if (notes.Count == 0)
+    {
+        <p style="color:red; margin:4rem">No notes </p>
+    }
+
+    <div style="background:white" class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Modal title</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label>Note Description</label>
+                    <input placeholder="Enter Note Description" class="form-control" @bind="newNotes" /> &nbsp;
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="addNewNotes">Save Note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+}
+
+@code {
+    string newNotes;
+    bool isLoading = false;
+
+    public class Notes
+    {
+        public int Id { get; set; }
+        public string Description { get; set; }
+    }
+
+    string API_URL = "http://localhost:5236/";
+    private List<Notes> notes = new List<Notes>();
+
+    private async Task RefreshList()
+    {
+        isLoading = true;
+        StateHasChanged(); // Notify Blazor to re-render the UI
+
+        try
+        {
+            using HttpClient httpClient = new HttpClient();
+            HttpResponseMessage response = await httpClient.GetAsync($"{API_URL}api/todoapp/GetNotes");
+            response.EnsureSuccessStatusCode();
+            notes = await response.Content.ReadFromJsonAsync<List<Notes>>();
+        }
+        catch (Exception ex)
+        {
+            // Handle the exception or log it
+            await JsRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Notify Blazor to re-render the UI
+        }
+    }
+
+    private async Task addNewNotes()
+    {
+        isLoading = true;
+        StateHasChanged(); // Notify Blazor to re-render the UI
+
+        try
+        {
+            var formData = new MultipartFormDataContent();
+            formData.Add(new StringContent(newNotes), "newNotes");
+
+            using HttpClient httpClient = new HttpClient();
+            HttpResponseMessage response = await httpClient.PostAsync(API_URL + "api/todoapp/AddNote", formData);
+            response.EnsureSuccessStatusCode();
+
+            string res = await response.Content.ReadAsStringAsync();
+        
+            await RefreshList();
+            newNotes = string.Empty;
+
+            await JsRuntime.InvokeVoidAsync("location.reload");
+         
+        }
+        catch (Exception ex)
+        {
+            // Handle the exception or log it
+            await JsRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Notify Blazor to re-render the UI
+        }
+    }
+
+ 
+
+    private async Task deleteNote(int id)
+    {
+        isLoading = true;
+        StateHasChanged(); // Notify Blazor to re-render the UI
+
+        try
+        {
+            HttpClient httpClient = new HttpClient();
+            HttpResponseMessage response = await httpClient.DeleteAsync($"{API_URL}api/todoapp/DeleteNote?id={id}");
+            httpClient.Dispose();
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+
+            string res =  response.Content.ReadAsStringAsync().Result;
+            
+            await this.RefreshList();
+        }
+        catch (Exception ex)
+        {
+            // Handle the exception or log it
+            await JsRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Notify Blazor to re-render the UI
+        }
+    }
+
+    private async Task DeleteAllNotes()
+    {
+        isLoading = true;
+        StateHasChanged(); // Notify Blazor to re-render the UI
+
+        try
+        {
+            using HttpClient httpClient = new HttpClient();
+            HttpResponseMessage response = await httpClient.DeleteAsync($"{API_URL}api/todoapp/DeleteAllNotes");
+            response.EnsureSuccessStatusCode();
+
+            string res = await response.Content.ReadAsStringAsync();
+            await JsRuntime.InvokeVoidAsync("alert", res);
+            await RefreshList();
+        }
+        catch (Exception ex)
+        {
+            // Handle the exception or log it
+            await JsRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Notify Blazor to re-render the UI
+        }
+    }
+
+    private void NavigateToUpdatePage(int id)
+    {
+        NavigationManager.NavigateTo($"/UpdateNote/{id}");
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshList();
+    }
+}
